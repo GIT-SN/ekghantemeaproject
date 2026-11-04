@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ResumeJudge - ATS Pass/Fail Analyzer</title>
+<script src="https://js.puter.com/v2/"></script>
+</head><body>
+<header><h1>📄 ResumeJudge</h1><p>Upload a resume (.pdf / .txt) and get a PASS / FAIL verdict with reasons.</p></header>
+<main>
+<section class="card">
+  <label id="drop" for="file">Drop resume here or click to upload (.pdf / .txt)</label>
+  <input type="file" id="file" accept=".pdf,.txt" hidden>
+  <textarea id="text" rows="8" placeholder="...or paste resume text here"></textarea>
+  <textarea id="jd" rows="4" placeholder="Optional: paste the job description to check keyword match"></textarea>
+  <input id="bench" placeholder="Optional: public resume URL (pdf/html/txt) to learn from and compare">
+  <div class="row">
+    <select id="model">
+      <option value="gpt-4o-mini">gpt-4o-mini</option>
+      <option value="claude-sonnet-4">claude-sonnet-4</option>
+      <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+    </select>
+    <button id="go">Analyze</button>
+  </div>
+  <p id="status"></p>
+</section>
+<section id="out" class="card" hidden></section>
+<section class="card"><h3>History</h3><ul id="hist"><li>No analyses yet</li></ul></section>
+</main>
+<script type="module" src="/src/main.js"></script>
+</body></html>

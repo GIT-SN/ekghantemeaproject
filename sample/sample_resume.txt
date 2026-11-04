@@ -1,0 +1,13 @@
+Sneha Sharma
+sneha@example.com | +91 98765 43210 | linkedin.com/in/sneha | github.com/sneha
+SUMMARY
+Final-year CSE student aspiring data scientist.
+EDUCATION
+B.Tech CSE, M.B.M. Engineering College, Jodhpur
+SKILLS
+Python, SQL, pandas, NumPy, scikit-learn, Streamlit, Git
+PROJECTS
+- Built an Employee Attrition Prediction System using scikit-learn, reaching 87% accuracy on 1,470 records
+- Developed a Stock Analytics Dashboard with Streamlit and Plotly serving 5 indices
+EXPERIENCE
+- Implemented 12 FastAPI endpoints with JWT auth, reducing manual tracking effort by 40%
