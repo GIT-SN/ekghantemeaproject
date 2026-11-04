@@ -2,6 +2,7 @@
 import './style.css';
 import { analyze } from './rules.js';
 import { predictStars } from './nb.js';
+import { detectAI } from './aidetect.js';
 import * as pdfjsLib from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.js?url';
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -51,7 +52,7 @@ async function aiJudge(text, jd, rules, model, bench) {
   const prompt = `You are a strict ATS + recruiter. Judge this resume.
 Rule-engine score: ${rules.score}/100 (${rules.verdict}).${jd ? '\nJOB DESCRIPTION:\n' + jd.slice(0, 2500) : ''}${bench ? '\nBENCHMARK RESUME (learn what a strong one does):\n' + bench.slice(0, 3500) : ''}
 RESUME:\n${text.slice(0, 6000)}
-Reply ONLY with JSON: {"verdict":"PASS|FAIL","why_pass":["..."],"why_fail":["..."],"top_fixes":["..."],"rewrites":[{"before":"...","after":"..."}],"vs_benchmark":["..."]}`;
+Reply ONLY with JSON: {"verdict":"PASS|FAIL","why_pass":["..."],"why_fail":["..."],"top_fixes":["..."],"rewrites":[{"before":"...","after":"..."}],"vs_benchmark":["..."],"ai_written":{"likelihood":0,"signals":["..."]}}\nai_written.likelihood = 0-100 chance the resume text was written by an AI chatbot.`;
   const r = await puter.ai.chat(prompt, { model });
   const s = typeof r === 'string' ? r : (r?.message?.content?.[0]?.text ?? r?.message?.content ?? String(r));
   const m = s.match(/\{[\s\S]*\}/); return m ? JSON.parse(m[0]) : null;
@@ -60,10 +61,13 @@ Reply ONLY with JSON: {"verdict":"PASS|FAIL","why_pass":["..."],"why_fail":["...
 /* ---------- Render ---------- */
 const list = a => (a?.length ? '<ul>' + a.map(x => `<li>${esc(x)}</li>`).join('') + '</ul>' : '<p>-</p>');
 const stars = n => '★'.repeat(n) + '☆'.repeat(5 - n);
-function render(r, ai, br, nb) {
+function render(r, ai, br, nb, det) {
+  const llm = ai?.ai_written?.likelihood ?? 0, high = det.level === 'HIGH' || llm >= 75, mid = det.level === 'MEDIUM' || llm >= 50;
+  const sig = [...det.signals, ...(llm >= 50 ? (ai.ai_written.signals || []) : [])];
+  const banner = high || mid ? `<div class="warn ${high ? 'hi' : ''}"><b>${high ? '⚠️ AI-created resume found' : '⚠️ This resume may be AI-assisted'}</b> (heuristic ${det.score}/100${ai ? `, AI judge ${llm}%` : ''})${list(sig)}<small>Detectors are not proof. Many people polish resumes with AI. Recruiters value personal, specific details you can explain in an interview.</small></div>` : '';
   const rows = r.checks.map(c => `<tr><td>${c.cat}</td><td>${esc(c.name)}</td><td class="${c.pts < c.max ? 'low' : 'good'}">${c.pts}/${c.max}</td><td>${c.pts < c.max ? esc(c.tip) : '✓'}</td></tr>`).join('');
   $('out').hidden = false;
-  $('out').innerHTML = `<div style="text-align:center"><span class="badge ${r.verdict}">${r.verdict}</span><span class="score">${r.score}/100</span>${br ? `<div>Benchmark resume scored <b>${br.score}</b> (${br.verdict})</div>` : ''}</div>
+  $('out').innerHTML = `${banner}<div style="text-align:center"><span class="badge ${r.verdict}">${r.verdict}</span><span class="score">${r.score}/100</span>${br ? `<div>Benchmark resume scored <b>${br.score}</b> (${br.verdict})</div>` : ''}</div>
   ${nb ? `<div style="text-align:center;margin:12px 0"><div style="font-size:2.2rem;color:#f59e0b">${stars(nb.stars)}</div><b>${nb.stars} / 5</b> <small>(expected ${nb.expected.toFixed(1)})</small><br><small>Algorithm: Multinomial Naive Bayes (Laplace smoothing; bag-of-words + ATS feature tokens)</small><div class="bars">${nb.probs.map((p, i) => `<div class="bar"><span>${i + 1}★</span><i style="width:${Math.round(p * 100)}%"></i><em>${Math.round(p * 100)}%</em></div>`).join('')}</div></div>` : ''}
   ${r.hard.length ? `<h3 class="low">Auto-fail triggers</h3>${list(r.hard)}` : ''}
   <h3>Score breakdown</h3><table><tr><th>Area</th><th>Check</th><th>Pts</th><th>Fix</th></tr>${rows}</table>
@@ -72,7 +76,7 @@ function render(r, ai, br, nb) {
   <h3>Suggested rewrites</h3>${(ai.rewrites || []).map(x => `<p><s>${esc(x.before)}</s><br>➜ ${esc(x.after)}</p>`).join('') || '-'}
   ${ai.vs_benchmark?.length ? `<h3>Learned from benchmark</h3>${list(ai.vs_benchmark)}` : ''}` : '<p>(AI feedback unavailable - rule-based result shown)</p>'}
   <button onclick="dl()">Download report</button>`;
-  window._report = { rules: r, ai, naiveBayes: nb };
+  window._report = { rules: r, ai, naiveBayes: nb, aiDetection: det };
 }
 window.dl = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(window._report, null, 2)], { type: 'application/json' })); a.download = 'resume-report.json'; a.click(); };
 
@@ -94,12 +98,12 @@ $('go').onclick = async () => {
   $('go').disabled = true;
   try {
     status('Running ATS checks...'); const jd = $('jd').value;
-    const rules = analyze(text, jd); let bench = '', br = null;
+    const rules = analyze(text, jd), det = detectAI(text); let bench = '', br = null;
     if ($('bench').value.trim()) { status('Fetching benchmark resume...'); try { bench = await urlToText($('bench').value.trim()); br = analyze(bench, jd); } catch (e) { status('Benchmark failed: ' + e.message); } }
     status('Asking AI judge...'); let ai = null;
     try { ai = await aiJudge(text, jd, rules, $('model').value, bench); } catch (e) { console.warn(e); }
     let nb = null; try { nb = await predictStars(text, rules); } catch (e) { console.warn(e); }
-    render(rules, ai, br, nb); status('Done.');
+    render(rules, ai, br, nb, det); status('Done.');
     const name = currentFile?.name || 'pasted-resume';
     try {
       if (currentFile) await puter.fs.write('ResumeJudge/' + Date.now() + '-' + name, currentFile, { createMissingParents: true });
